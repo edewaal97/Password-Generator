@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="text-[1.125rem]">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +11,7 @@
         @livewireStyles
         @fluxAppearance
     </head>
-    <body>
+    <body class="mx-1 sm:mx-4">
         {{ $slot }}
 
         @livewireScripts
