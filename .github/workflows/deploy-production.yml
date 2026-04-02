@@ -1,0 +1,194 @@
+name: Deploy Production
+
+# Controls when the workflow will run
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  # ===============================================
+  # JOB 1: BUILD AND TEST
+  # Runs PHP/Pest tests and builds front-end assets
+  # ===============================================
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v5
+
+      # ---------------------------------------------
+      # PHP Environment Setup
+      # ---------------------------------------------
+      - name: ⚙️ Setup PHP Environment
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, dom, fileinfo
+          coverage: xdebug
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: 💾 Install Composer Dependencies
+        run: composer install --no-progress --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: 🔑 Configure Application (required for tests)
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan config:clear
+
+      # ---------------------------------------------
+      # Node Setup & Build
+      # ---------------------------------------------
+      - name: 🛠️ Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: 📦 Install Node Dependencies
+        run: npm install
+
+      - name: 🔨 Build app
+        run: npm run build
+
+      # ---------------------------------------------
+      # Run PHP Tests (Pest)
+      # ---------------------------------------------
+
+      - name: 🧪 Run Pest Tests
+        run: ./vendor/bin/pest --ci --parallel
+
+      # ---------------------------------------------
+      # Artifact Upload
+      # ---------------------------------------------
+      - name: 📤 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-assets
+          path: public/build/
+          retention-days: 1
+
+
+  # ===============================================
+  # JOB 2: DEPLOY
+  # Downloads assets and performs SSH deployment
+  # ===============================================
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build_and_test # Only run deployment if tests and build succeed
+    environment: production
+
+    steps:
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: build-assets
+          path: build-assets/
+
+      - name: 📝 Write SSH Known Hosts File
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/known_hosts
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: 🔑 Install SSH Key
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 🚀 Pre-Deploy Commands (Take App Down)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # The remote directory where the app lives
+          script: |
+            echo "Setup correct environment"
+
+            echo "Adding github.com to known_hosts..."
+            if [ ! -d "$HOME/.ssh" ]; then
+            mkdir -p $HOME/.ssh
+            chmod 700 $HOME/.ssh
+            fi
+            ssh-keyscan github.com >> $HOME/.ssh/known_hosts
+
+            echo "Checking for latest Composer version..."
+            curl -sS https://getcomposer.org/installer | php
+            mv composer.phar $HOME/composer.phar
+
+            echo "Changing directory to root of git repository"
+            cd ${{ secrets.REMOTE_FOLDER }}
+
+            echo "bringing the application down"
+            php artisan down --with-secret
+
+            echo "clear laravel optimizations"
+            php artisan optimize:clear
+
+            echo "Performing git pull."
+            git pull origin master
+
+            echo "Running Composer Install..."
+            $HOME/composer.phar install --no-progress --prefer-dist --optimize-autoloader --no-interaction --no-dev
+
+            echo "running database migrations"
+            php artisan migrate --force
+
+            echo "create symbolic link from folder ./storage/app/public to ./public/storage"
+            php artisan storage:link
+
+      - name: 🚀 Deploy via Rsync/SSH
+        run: > # convert below to one single command (Folded Block Scalar).
+          rsync
+          --archive
+          --compress
+          --delete
+          --human-readable
+          --itemize-changes
+          --stats
+          --verbose
+          --rsh='ssh -p ${{ secrets.SSH_PORT }}'
+          --exclude={'.git','.github'}
+          ./build-assets/
+          ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_FOLDER }}/public/build/
+
+      - name: 🎉 Post-Deploy Commands (Migrate & Bring App Up)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # The remote directory where the app lives
+          script: |
+            echo "Running post-deploy commands..."
+
+            echo "Changing directory to root of git repository"
+            cd ${{ secrets.REMOTE_FOLDER }}
+
+            echo "Clear caches"
+            php artisan optimize:clear
+
+            echo "Optimize Laravel"
+            php artisan optimize
+
+            echo "Bring the app up"
+            php artisan up
