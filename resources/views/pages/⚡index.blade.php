@@ -14,6 +14,8 @@ new #[Title('Password Generator')] class extends Component {
     #[Session]
     public OptionGroup $number = OptionGroup::ONE;
     #[Session]
+    public OptionGroup $special = OptionGroup::ONE;
+    #[Session]
     public bool $characterBetweenItems = true;
     #[Session]
     public string $chosenCharacterBetweenItems = "-";
@@ -30,6 +32,11 @@ new #[Title('Password Generator')] class extends Component {
 
     public array $passwords = [];
 
+    private array $specialCharacters = [
+        '@', '#', '€', '&', '-', '_', '(', ')', '=', '%', '*', ':', '/', '!', '?', '+', ',', '.',
+        ';', '{', '}', '[', ']', '<', '>', '\\', '|', '"', '\'',
+    ];
+
     private array $wordlist;
 
     public function mount(): void
@@ -40,7 +47,7 @@ new #[Title('Password Generator')] class extends Component {
     public function updated($property): void
     {
         if (in_array($property, [
-            'word', 'capital', 'number',
+            'word', 'capital', 'number', 'special',
             'characterBetweenItems',
             'chosenCharacterBetweenItems',
             'minlength',
@@ -66,9 +73,10 @@ new #[Title('Password Generator')] class extends Component {
         $this->optional = [];
 
         $options = [
-            "word" => $this->word,
-            "capital" => $this->capital,
-            "number" => $this->number,
+            'word' => $this->word,
+            'capital' => $this->capital,
+            'number' => $this->number,
+            'special' => $this->special,
         ];
 
         foreach ($options as $option => $value) {
@@ -110,10 +118,13 @@ new #[Title('Password Generator')] class extends Component {
     {
         $wordlist = $this->getWordlist();
 
+        $specialCharacters = $this->specialCharacters;
+
         return match ($array) {
             'word' => $this->getRandom($wordlist),
             'capital' => ucfirst($this->getRandom($wordlist)),
             'number' => random_int(0, 999),
+            'special' => $this->getRandom($specialCharacters),
         };
     }
 
@@ -234,6 +245,18 @@ new #[Title('Password Generator')] class extends Component {
 
                     <flux:radio.group wire:model.live="number"
                                       label="Getallen"
+                                      variant="segmented"
+                                      size="sm">
+                        @foreach(OptionGroup::cases() as $case)
+                            <flux:radio :label="$case->label()" :value="$case->value"/>
+                        @endforeach
+                    </flux:radio.group>
+
+                    <flux:separator variant="subtle"/>
+
+                    <flux:radio.group wire:model.live="special"
+                                      label="Speciaal karakter"
+                                      :description="implode(' ', $this->specialCharacters)"
                                       variant="segmented"
                                       size="sm">
                         @foreach(OptionGroup::cases() as $case)
