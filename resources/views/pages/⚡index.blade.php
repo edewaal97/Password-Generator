@@ -30,6 +30,8 @@ new #[Title('Password Generator')] class extends Component {
 
     public array $passwords = [];
 
+    private array $wordlist;
+
     public function mount(): void
     {
         $this->generate();
@@ -174,15 +176,19 @@ new #[Title('Password Generator')] class extends Component {
 
     private function getWordlist(): array
     {
-        return Cache::remember('wordlist', now()->addDay(), function () {
-            $files = [];
-            $flags = FILE_IGNORE_NEW_LINES + FILE_SKIP_EMPTY_LINES;
-            $filenames = glob(storage_path("app/wordlists/*.txt"));
-            foreach ($filenames as $filename) {
-                $files[] = file($filename, $flags);
-            }
-            return array_merge(...$files);
-        });
+        if (empty($this->wordlist)) {
+            $this->wordlist = Cache::remember('wordlist', now()->addDay(), function () {
+                $files = [];
+                $flags = FILE_IGNORE_NEW_LINES + FILE_SKIP_EMPTY_LINES;
+                $filenames = glob(storage_path("app/wordlists/*.txt"));
+                foreach ($filenames as $filename) {
+                    $files[] = file($filename, $flags);
+                }
+                return array_merge(...$files);
+            });
+        }
+
+        return $this->wordlist;
     }
 };
 ?>
