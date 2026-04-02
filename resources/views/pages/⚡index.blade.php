@@ -1,29 +1,32 @@
 <?php
 
-use Livewire\Attributes\Url;
+use Livewire\Attributes\Session;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 use App\Enums\OptionGroup;
+use Livewire\Attributes\Title;
 
-new class extends Component {
-    public array $opt = [
-        "word" => OptionGroup::ZEROORMORE,
-        "capital" => OptionGroup::ZEROORMORE,
-        "number" => OptionGroup::ONEORMORE,
-    ];
-
+new #[Title('Password Generator')] class extends Component {
+    #[Session]
+    public OptionGroup $word = OptionGroup::ZEROORMORE;
+    #[Session]
+    public OptionGroup $capital = OptionGroup::ZEROORMORE;
+    #[Session]
+    public OptionGroup $number = OptionGroup::ONE;
+    #[Session]
     public bool $characterBetweenItems = true;
+    #[Session]
     public string $chosenCharacterBetweenItems = "-";
+    #[Session]
+    #[Validate('lte:maxlength', message: "De minimale lengte moet lager zijn dat de maximale lengte.")]
+    public int $minlength = 25;
+    #[Session]
+    #[Validate('gte:minlength', message: "De maximale lengte moet hoger zijn dat de minimale lengte.")]
+    public int $maxlength = 40;
 
     public array $required = [];
 
     public array $optional = [];
-
-    #[Url]
-    public int $minlength = 25;
-
-    #[Url]
-    public int $maxlength = 40;
 
     public array $passwords = [];
 
@@ -35,7 +38,7 @@ new class extends Component {
     public function updated($property): void
     {
         if (in_array($property, [
-            'opt.word', 'opt.capital', 'opt.number',
+            'word', 'capital', 'number',
             'characterBetweenItems',
             'chosenCharacterBetweenItems',
             'minlength',
@@ -60,7 +63,13 @@ new class extends Component {
         $this->required = [];
         $this->optional = [];
 
-        foreach ($this->opt as $option => $value) {
+        $options = [
+            "word" => $this->word,
+            "capital" => $this->capital,
+            "number" => $this->number,
+        ];
+
+        foreach ($options as $option => $value) {
             if ($value instanceof OptionGroup) {
                 if (in_array($value, [OptionGroup::ONE, OptionGroup::ONEORMORE])) {
                     $this->required[] = $option;
@@ -70,43 +79,39 @@ new class extends Component {
                     $this->optional[] = $option;
                 }
             }
-
-            if (is_bool($value)) {
-                if ($value) {
-                    $this->required[] = $option;
-                    $this->optional[] = $option;
-                }
-            }
         }
 
         if (empty($this->optional)) {
             $this->optional[] = 'word';
-            $this->opt['word'] = $this->opt['word'] == OptionGroup::ONE
+            $this->word = $options['word'] == OptionGroup::ONE
                 ? OptionGroup::ONEORMORE
                 : OptionGroup::ZEROORMORE;
         }
 
-        if ($this->minlength > $this->maxlength) {
-            $this->minlength = $this->maxlength;
-        }
+        $this->validate();
+    }
+
+    public function resetSession(): void
+    {
+        $this->word = OptionGroup::ZEROORMORE;
+        $this->capital = OptionGroup::ZEROORMORE;
+        $this->number = OptionGroup::ONE;
+        $this->characterBetweenItems = true;
+        $this->chosenCharacterBetweenItems = '-';
+        $this->minlength = 25;
+        $this->maxlength = 40;
+
+        $this->generate();
     }
 
     public function generatePart($array): string
     {
-        $wordlist = [
-            'lorem',
-            'ipsum',
-            'dolor',
-            'sit',
-            'amit',
-        ];
-
-        $specialCharacters = ['[', ']', ';', ',', '.', '-', '#', '&',];
+        $wordlist = $this->getWordlist();
 
         return match ($array) {
             'word' => $this->getRandom($wordlist),
             'capital' => ucfirst($this->getRandom($wordlist)),
-            'number' => random_int(0, 9),
+            'number' => random_int(0, 999),
         };
     }
 
@@ -134,7 +139,12 @@ new class extends Component {
         }
 
         if (!empty($this->optional)) {
+            $attempts = 0;
             while (strlen($this->implodePassword($passwordArray)) < $this->minlength) {
+                if ($attempts > 30) {
+                    break;
+                }
+
                 $randomItem = array_rand($this->optional);
 
                 $part = $this->generatePart($this->optional[$randomItem]);
@@ -142,6 +152,8 @@ new class extends Component {
                 if (strlen($this->implodePassword($passwordArray) . $part) <= $this->maxlength) {
                     $passwordArray[] = $part;
                 }
+
+                $attempts++;
             }
         }
 
@@ -152,8 +164,25 @@ new class extends Component {
 
     private function getRandom(array $list): string
     {
+        if (empty($list)) {
+            return '';
+        }
+
         $random = random_int(0, count($list) - 1);
         return trim($list[$random]);
+    }
+
+    private function getWordlist(): array
+    {
+        return Cache::remember('wordlist', now()->addDay(), function () {
+            $files = [];
+            $flags = FILE_IGNORE_NEW_LINES + FILE_SKIP_EMPTY_LINES;
+            $filenames = glob(storage_path("app/wordlists/*.txt"));
+            foreach ($filenames as $filename) {
+                $files[] = file($filename, $flags);
+            }
+            return array_merge(...$files);
+        });
     }
 };
 ?>
@@ -164,7 +193,8 @@ new class extends Component {
         @foreach($passwords as $password)
             <flux:input.group>
                 <flux:input :value="$password" class="font-mono" readonly copyable/>
-                <flux:input.group.suffix><span class="min-w-[2ch] text-center"><?= strlen($password) ?></span></flux:input.group.suffix>
+                <flux:input.group.suffix><span class="min-w-[2ch] text-center"><?= strlen($password) ?></span>
+                </flux:input.group.suffix>
             </flux:input.group>
         @endforeach
     </div>
@@ -176,7 +206,7 @@ new class extends Component {
                 <flux:legend>Opties</flux:legend>
 
                 <div class="space-y-4">
-                    <flux:radio.group wire:model.live="opt.word"
+                    <flux:radio.group wire:model.live="word"
                                       label="Woorden"
                                       variant="segmented"
                                       size="sm">
@@ -185,7 +215,7 @@ new class extends Component {
                         @endforeach
                     </flux:radio.group>
 
-                    <flux:radio.group wire:model.live="opt.capital"
+                    <flux:radio.group wire:model.live="capital"
                                       label="Woorden met hoofdletters"
                                       variant="segmented"
                                       size="sm">
@@ -196,7 +226,7 @@ new class extends Component {
 
                     <flux:separator variant="subtle"/>
 
-                    <flux:radio.group wire:model.live="opt.number"
+                    <flux:radio.group wire:model.live="number"
                                       label="Getallen"
                                       variant="segmented"
                                       size="sm">
@@ -223,17 +253,22 @@ new class extends Component {
                         <flux:input.group.prefix>Min.</flux:input.group.prefix>
                         <flux:input wire:model.live.debounce.300ms="minlength" type="number"/>
                         <flux:input.group.suffix>karakters</flux:input.group.suffix>
+                        <flux:error></flux:error>
                     </flux:input.group>
+                    <flux:error name="minlength"/>
 
                     <flux:input.group>
                         <flux:input.group.prefix>Max.</flux:input.group.prefix>
-                        <flux:input wire:model.live.debounce.300ms="maxlength" type="number" />
+                        <flux:input wire:model.live.debounce.300ms="maxlength" type="number"/>
                         <flux:input.group.suffix>karakters</flux:input.group.suffix>
                     </flux:input.group>
+                    <flux:error name="maxlength"/>
 
                     <flux:separator variant="subtle"/>
 
                     <flux:button wire:click="generate()">Regenerate</flux:button>
+
+                    <flux:button wire:click="resetSession()">Reset to Default</flux:button>
 
                 </div>
             </flux:fieldset>
