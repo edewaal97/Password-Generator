@@ -192,7 +192,7 @@ new #[Title('Password Generator')] class extends Component {
     <div class="grow shrink basis-md max-w-xl space-y-4">
         @foreach($passwords as $password)
             <flux:input.group>
-                <flux:input :value="$password" class="font-mono" readonly copyable/>
+                <flux:input :value="$password" class="font-mono" input:class="text-white!" readonly copyable/>
                 <flux:input.group.suffix><span class="min-w-[2ch] text-center"><?= strlen($password) ?></span>
                 </flux:input.group.suffix>
             </flux:input.group>
