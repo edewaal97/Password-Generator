@@ -39,3 +39,9 @@
         --color-accent-foreground: var(--color-amber-950);
     }
 }
+
+@layer theme {
+    .font-mono {
+        font-variant-ligatures: none;
+    }
+}
