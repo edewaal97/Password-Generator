@@ -209,7 +209,7 @@ new #[Title('Password Generator')] class extends Component {
     <div class="grow shrink basis-md max-w-xl space-y-4">
         @foreach($passwords as $password)
             <flux:input.group>
-                <flux:input :value="$password" class="font-mono" input:class="text-white!" readonly copyable/>
+                <flux:input :value="$password" class="font-mono" input:class="dark:text-white!" readonly copyable/>
                 <flux:input.group.suffix><span class="min-w-[2ch] text-center"><?= strlen($password) ?></span>
                 </flux:input.group.suffix>
             </flux:input.group>
@@ -220,7 +220,14 @@ new #[Title('Password Generator')] class extends Component {
         <flux:card>
 
             <flux:fieldset>
-                <flux:legend>Opties</flux:legend>
+                <div class="flex justify-between">
+                    <flux:legend>Opties</flux:legend>
+                    <flux:radio.group x-data variant="segmented" x-model="$flux.appearance" size="sm">
+                        <flux:radio value="light" icon="sun" />
+                        <flux:radio value="dark" icon="moon" />
+                        <flux:radio value="system" icon="computer-desktop" />
+                    </flux:radio.group>
+                </div>
 
                 <div class="space-y-4">
                     <flux:radio.group wire:model.live="word"
