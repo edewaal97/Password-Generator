@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: ⬇️ Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # ---------------------------------------------
       # PHP Environment Setup
@@ -30,7 +30,7 @@ jobs:
       - name: ⚙️ Setup PHP Environment
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.4'
           extensions: mbstring, dom, fileinfo
           coverage: xdebug
 
@@ -39,7 +39,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
       - name: Cache composer dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
@@ -58,15 +58,21 @@ jobs:
       # Node Setup & Build
       # ---------------------------------------------
       - name: 🛠️ Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
+          cache: 'pnpm'
+
+      - name: 📦 Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12
 
       - name: 📦 Install Node Dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: 🔨 Build app
-        run: npm run build
+        run: pnpm build
 
       # ---------------------------------------------
       # Run PHP Tests (Pest)
@@ -79,7 +85,7 @@ jobs:
       # Artifact Upload
       # ---------------------------------------------
       - name: 📤 Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-assets
           path: public/build/
@@ -97,7 +103,7 @@ jobs:
 
     steps:
       - name: 📥 Download Build Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: build-assets
           path: build-assets/
@@ -108,7 +114,7 @@ jobs:
           echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: 🔑 Install SSH Key
-        uses: webfactory/ssh-agent@v0.9.1
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
