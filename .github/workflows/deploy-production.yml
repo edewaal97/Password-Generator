@@ -61,7 +61,6 @@ jobs:
       - name: 📦 Set up Node.js and pnpm
         uses: pnpm/setup@v3
         with:
-          version: 12
           runtime: node@26
           cache: true
           install: false
